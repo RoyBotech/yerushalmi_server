@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const connectDB = require("./mongoose");
 const authenticateToken = require("./authenticateToken");
+const cors = require("cors");
 const DiamondNew = require("./models/diamondNew");
 const jwt = require("jsonwebtoken");
 
@@ -9,11 +10,22 @@ const app = express();
 connectDB();
 app.use(express.json());
 
+app.use(cors());
+
 // generate token
 app.post("/generate-token", (req, res) => {
   const user = { id: 1, username: "testuser" }; // Example payload
   const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: "1h" });
   res.json({ token });
+});
+
+app.get("/data", authenticateToken, async (req, res) => {
+  try {
+    const data = await DiamondNew.find();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 });
 
 //get all the diamond
@@ -87,5 +99,5 @@ app.post("/diamonds", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
