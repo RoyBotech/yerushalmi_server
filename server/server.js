@@ -4,6 +4,8 @@ const connectDB = require("./mongoose");
 const authenticateToken = require("./authenticateToken");
 const cors = require("cors");
 const DiamondNew = require("./models/diamondNew");
+const Color = require("./models/color");
+const Shape = require("./models/shape");
 const jwt = require("jsonwebtoken");
 
 const app = express();
@@ -13,13 +15,13 @@ app.use(express.json());
 app.use(cors());
 
 // generate token
-app.post("/generate-token", (req, res) => {
+app.post("/yerushalmi/generate-token", (req, res) => {
   const user = { id: 1, username: "testuser" }; // Example payload
   const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: "1h" });
   res.json({ token });
 });
 
-app.get("/data", authenticateToken, async (req, res) => {
+app.get("/yerushalmi/data", authenticateToken, async (req, res) => {
   try {
     const data = await DiamondNew.find();
     res.json(data);
@@ -29,7 +31,7 @@ app.get("/data", authenticateToken, async (req, res) => {
 });
 
 //get all the diamond
-app.get("/data", authenticateToken, async (req, res) => {
+app.get("/yerushalmi/diamonds", authenticateToken, async (req, res) => {
   console.log("res:", res);
   const { search, sort } = req.query;
   try {
@@ -50,8 +52,29 @@ app.get("/data", authenticateToken, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+//the all colors from the mongoDB
+app.get("/yerushalmi/colors", async (req, res) => {
+  try {
+    const colors = await Color.find();
+    res.json(colors);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching colors", error });
+  }
+});
+
+//The all shapes from the mongoDB
+app.get("/yerushalmi/shapes", async (req, res) => {
+  try {
+    const shapes = await Shape.find();
+    res.json(shapes);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching colors", error });
+  }
+});
+
 // Endpoint to create a new diamond item
-app.post("/diamonds", async (req, res) => {
+app.post("/yerushalmi/diamonds", async (req, res) => {
   const {
     VendorStockNumber,
     Shape,
