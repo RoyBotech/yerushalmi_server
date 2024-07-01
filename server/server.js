@@ -11,6 +11,7 @@ const fs = require("fs");
 const csv = require("csv-parser");
 const FTPClient = require("ftp");
 const path = require("path");
+const moment = require("moment");
 
 const app = express();
 connectDB();
@@ -25,37 +26,90 @@ const ftpConfig = {
 };
 
 // Path to the directory containing the CSV files on the FTP server (root directory)
-const ftpDirPath = "/home/ftpuser/vegas stones csv.csv";
+// const ftpDirPath = "/home/ftpuser/vegas stones csv.csv";
 
 // Local path to save the downloaded CSV file
 const localCsvPath = path.join(__dirname, "/data_ftp/data_new.csv"); // Ensure the file is saved in the current directory
 
 // Function to download CSV file from FTP and save locally
-function downloadCsvFromFTP(callback) {
+// function downloadCsvFromFTP(callback) {
+//   const client = new FTPClient();
+
+//   client.on("ready", () => {
+//     client.get(ftpDirPath, (err, stream) => {
+//       if (err) {
+//         console.error("Error downloading file from FTP:", err);
+//         client.end();
+//         return callback(err);
+//       }
+
+//       const writeStream = fs.createWriteStream(localCsvPath);
+
+//       stream.once("close", () => {
+//         console.log(`Downloaded file ${ftpDirPath} successfully`);
+//         client.end();
+//         callback();
+//       });
+
+//       stream.pipe(writeStream);
+//       // stream.pipe(fs.createWriteStream(localCsvPath));
+//       writeStream.on("error", (err) => {
+//         console.error("Error writing to local file:", err);
+//         client.end();
+//         callback(err);
+//       });
+//     });
+//   });
+
+//   client.on("error", (err) => {
+//     console.error("FTP client error:", err);
+//   });
+//   client.connect(ftpConfig);
+// }
+
+// Function to download the most recent CSV file from FTP and save locally
+function downloadLatestCsvFromFTP(callback) {
   const client = new FTPClient();
 
   client.on("ready", () => {
-    client.get(ftpDirPath, (err, stream) => {
+    client.list((err, list) => {
       if (err) {
-        console.error("Error downloading file from FTP:", err);
+        console.error("Error listing files on FTP:", err);
         client.end();
         return callback(err);
       }
 
-      const writeStream = fs.createWriteStream(localCsvPath);
+      // Sort files by modification time
+      list.sort((a, b) => moment(b.date).valueOf() - moment(a.date).valueOf());
 
-      stream.once("close", () => {
-        console.log(`Downloaded file ${ftpDirPath} successfully`);
-        client.end();
-        callback();
-      });
+      // Get the most recent file
+      const latestFile = list[0].name;
 
-      stream.pipe(writeStream);
-      // stream.pipe(fs.createWriteStream(localCsvPath));
-      writeStream.on("error", (err) => {
-        console.error("Error writing to local file:", err);
-        client.end();
-        callback(err);
+      console.log(`Downloading latest file: ${latestFile}`);
+
+      client.get(latestFile, (err, stream) => {
+        if (err) {
+          console.error("Error downloading file from FTP:", err);
+          client.end();
+          return callback(err);
+        }
+
+        const writeStream = fs.createWriteStream(localCsvPath);
+
+        stream.once("close", () => {
+          console.log(`Downloaded file ${latestFile} successfully`);
+          client.end();
+          callback();
+        });
+
+        stream.pipe(writeStream);
+
+        // Handle errors during writing
+        writeStream.on("error", (err) => {
+          console.error("Error writing to local file:", err);
+          client.end();
+          callback(err);
+        });
       });
     });
   });
@@ -63,6 +117,7 @@ function downloadCsvFromFTP(callback) {
   client.on("error", (err) => {
     console.error("FTP client error:", err);
   });
+
   client.connect(ftpConfig);
 }
 
@@ -105,7 +160,7 @@ function processCsvAndSaveToMongo() {
 
 // Endpoint to trigger the FTP download and save to MongoDB
 app.post("/yerushalmi/import-diamonds", authenticateToken, (req, res) => {
-  downloadCsvFromFTP(() => {
+  downloadLatestCsvFromFTP(() => {
     processCsvAndSaveToMongo();
     res
       .status(200)
@@ -149,6 +204,19 @@ app.get("/yerushalmi/diamonds", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Error fetching data:", error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// Endpoint to delete all documents from the diamonds_new collection
+app.delete("/yerushalmi/diamonds", authenticateToken, async (req, res) => {
+  try {
+    await DiamondNew.deleteMany({});
+    res.status(200).json({ message: "All diamonds deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting diamonds:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to delete diamonds", error: error.message });
   }
 });
 
