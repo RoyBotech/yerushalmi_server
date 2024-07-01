@@ -7,12 +7,111 @@ const DiamondNew = require("./models/diamondNew");
 const Color = require("./models/color");
 const Shape = require("./models/shape");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const csv = require("csv-parser");
+const FTPClient = require("ftp");
+const path = require("path");
 
 const app = express();
 connectDB();
 app.use(express.json());
-
 app.use(cors());
+
+// FTP configuration
+const ftpConfig = {
+  host: "206.81.26.56",
+  user: "ftpuser",
+  password: "ftpuser1",
+};
+
+// Path to the directory containing the CSV files on the FTP server (root directory)
+const ftpDirPath = "/home/ftpuser/vegas stones csv.csv";
+
+// Local path to save the downloaded CSV file
+const localCsvPath = path.join(__dirname, "/data_ftp/data_new.csv"); // Ensure the file is saved in the current directory
+
+// Function to download CSV file from FTP and save locally
+function downloadCsvFromFTP(callback) {
+  const client = new FTPClient();
+
+  client.on("ready", () => {
+    client.get(ftpDirPath, (err, stream) => {
+      if (err) {
+        console.error("Error downloading file from FTP:", err);
+        client.end();
+        return callback(err);
+      }
+
+      const writeStream = fs.createWriteStream(localCsvPath);
+
+      stream.once("close", () => {
+        console.log(`Downloaded file ${ftpDirPath} successfully`);
+        client.end();
+        callback();
+      });
+
+      stream.pipe(writeStream);
+      // stream.pipe(fs.createWriteStream(localCsvPath));
+      writeStream.on("error", (err) => {
+        console.error("Error writing to local file:", err);
+        client.end();
+        callback(err);
+      });
+    });
+  });
+
+  client.on("error", (err) => {
+    console.error("FTP client error:", err);
+  });
+  client.connect(ftpConfig);
+}
+
+// Function to process the CSV file and save data to MongoDB
+function processCsvAndSaveToMongo() {
+  const results = [];
+
+  fs.createReadStream(localCsvPath)
+    .pipe(csv())
+    .on("data", (row) => {
+      // Map CSV fields to MongoDB fields
+      const mappedRow = {
+        VendorStockNumber: row["VendorStockNumber"],
+        Shape: row["Shape"],
+        Weight: row["Weight"],
+        Color: row["Color"],
+        Clarity: row["Clarity"],
+        Cut: row["Cut"],
+        Polish: row["Polish"],
+        Symmetry: row["Symmetry"],
+        FluorescenceIntensity: row["FluorescenceIntensity"],
+        Lab: row["Lab"],
+        ROUGH_CT: row["ROUGH CT"], // Map "ROUGH CT" to "ROUGH_CT"
+        ROUGH_DATE: row["ROUGH DATE"], // Map "ROUGH DATE" to "ROUGH_DATE"
+        CertificateUrl: row["CertificateUrl"] || "-",
+        RoughVideo: row["Rough Video"], // Map "Rough Video" to "RoughVideo"
+        PolishedVideo: row["Polished Video"], // Map "Polished Video" to "PolishedVideo"
+      };
+      results.push(mappedRow);
+    })
+    .on("end", async () => {
+      try {
+        await DiamondNew.insertMany(results);
+        console.log("Data successfully saved to MongoDB");
+      } catch (error) {
+        console.error("Error saving data to MongoDB:", error);
+      }
+    });
+}
+
+// Endpoint to trigger the FTP download and save to MongoDB
+app.post("/yerushalmi/import-diamonds", authenticateToken, (req, res) => {
+  downloadCsvFromFTP(() => {
+    processCsvAndSaveToMongo();
+    res
+      .status(200)
+      .json({ message: "FTP download initiated and data is being processed" });
+  });
+});
 
 // generate token
 app.post("/yerushalmi/generate-token", (req, res) => {
