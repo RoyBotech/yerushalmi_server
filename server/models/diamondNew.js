@@ -16,6 +16,7 @@ const diamondNewSchema = new mongoose.Schema({
   CertificateUrl: { type: String, required: true },
   RoughVideo: { type: String, required: true },
   PolishedVideo: { type: String, required: true },
+  HTMLTemplate: String, // New field for storing the HTML template
 });
 
 const DiamondNew = mongoose.model("Diamond_new", diamondNewSchema);

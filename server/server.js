@@ -121,6 +121,25 @@ function downloadLatestCsvFromFTP(callback) {
   client.connect(ftpConfig);
 }
 
+// Read the HTML template
+const templatePath = path.join(__dirname, "../yerushalmi/docs/template.html");
+const template = fs.readFileSync(templatePath, "utf-8");
+// console.log("Template Path:", templatePath);
+
+// Function to replace placeholders with actual data
+function generateHtml(data) {
+  console.log("data:", data);
+
+  let html = template;
+  Object.keys(data).forEach((key) => {
+    const placeholder = `\${diamond.${key}}`;
+    const value = data[key];
+    // Replace the placeholder with the corresponding value, handling special characters
+    html = html.split(placeholder).join(value || "");
+  });
+  return html;
+}
+
 // Function to process the CSV file and save data to MongoDB
 function processCsvAndSaveToMongo() {
   const results = [];
@@ -146,6 +165,8 @@ function processCsvAndSaveToMongo() {
         RoughVideo: row["Rough Video"], // Map "Rough Video" to "RoughVideo"
         PolishedVideo: row["Polished Video"], // Map "Polished Video" to "PolishedVideo"
       };
+
+      mappedRow.HTMLTemplate = generateHtml(mappedRow); // Generate and save the HTML template
       results.push(mappedRow);
     })
     .on("end", async () => {
@@ -157,6 +178,96 @@ function processCsvAndSaveToMongo() {
       }
     });
 }
+
+// Endpoint to get a diamond by VendorStockNumber and generate HTML
+app.post("/yerushalmi/diamond/html", authenticateToken, async (req, res) => {
+  const { VendorStockNumber } = req.body;
+
+  if (!VendorStockNumber) {
+    return res.status(400).json({ message: "VendorStockNumber is required" });
+  }
+
+  try {
+    const diamond = await DiamondNew.findOne({ VendorStockNumber }).lean();
+    if (!diamond) {
+      return res.status(404).json({ message: "Diamond not found" });
+    }
+
+    // Generate HTML if not already present
+    if (!diamond.HTMLTemplate) {
+      diamond.HTMLTemplate = generateHtml(diamond);
+      await DiamondNew.updateOne(
+        { _id: diamond._id },
+        { HTMLTemplate: diamond.HTMLTemplate }
+      );
+    }
+
+    res.send(diamond.HTMLTemplate); // Send the generated HTML as the response
+  } catch (error) {
+    console.error("Error generating HTML:", error);
+    res.status(500).json({ message: error.message });
+  }
+});
+// Endpoint to generate HTML templates for multiple diamonds
+app.post(
+  "/yerushalmi/diamond/generateHtmlTemplates",
+  authenticateToken,
+  async (req, res) => {
+    const { vendorStockNumbers } = req.body;
+
+    if (!Array.isArray(vendorStockNumbers) || vendorStockNumbers.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "VendorStockNumbers should be a non-empty array" });
+    }
+
+    try {
+      const diamonds = await DiamondNew.find({
+        VendorStockNumber: { $in: vendorStockNumbers },
+      }).lean();
+
+      for (const diamond of diamonds) {
+        // Generate HTML if not already present
+        if (!diamond.HTMLTemplate) {
+          diamond.HTMLTemplate = generateHtml(diamond);
+          await DiamondNew.updateOne(
+            { _id: diamond._id },
+            { HTMLTemplate: diamond.HTMLTemplate }
+          );
+        }
+      }
+
+      res.json({ message: "HTML templates generated and saved successfully" });
+    } catch (error) {
+      console.error("Error generating HTML templates:", error);
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
+
+// app.post("/yerushalmi/diamond/getHtmlTemplate", authenticateToken, async (req, res) => {
+//   const { VendorStockNumber } = req.body;
+
+//   if (!VendorStockNumber) {
+//     return res.status(400).json({ message: "VendorStockNumber is required" });
+//   }
+
+//   try {
+//     const diamond = await DiamondNew.findOne({ VendorStockNumber }).lean();
+//     if (!diamond) {
+//       return res.status(404).json({ message: "Diamond not found" });
+//     }
+
+//     if (!diamond.HTMLTemplate) {
+//       return res.status(404).json({ message: "HTMLTemplate not found for the specified diamond" });
+//     }
+
+//     res.json({ HTMLTemplate: diamond.HTMLTemplate });
+//   } catch (error) {
+//     console.error("Error fetching HTML template:", error);
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
 // Endpoint to trigger the FTP download and save to MongoDB
 app.post("/yerushalmi/import-diamonds", authenticateToken, (req, res) => {
