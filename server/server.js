@@ -67,6 +67,11 @@ const localCsvPath = path.join(__dirname, "/data_ftp/data_new.csv"); // Ensure t
 //   client.connect(ftpConfig);
 // }
 
+// Function to sanitize the file name
+function sanitizeFileName(name) {
+  return name.replace(/\./g, "").replace(/[^a-zA-Z0-9-_]/g, "");
+}
+
 // Function to download the most recent CSV file from FTP and save locally
 function downloadLatestCsvFromFTP(callback) {
   const client = new FTPClient();
@@ -202,6 +207,15 @@ app.post("/yerushalmi/diamond/html", authenticateToken, async (req, res) => {
       );
     }
 
+    // Define the path for the HTML file
+    const htmlFilePath = path.join(
+      __dirname,
+      `../yerushalmi/docs/${VendorStockNumber}_NEW.html`
+    );
+
+    // Write the HTML file to the specified path
+    fs.writeFileSync(htmlFilePath, diamond.HTMLTemplate, "utf-8");
+
     res.send(diamond.HTMLTemplate); // Send the generated HTML as the response
   } catch (error) {
     console.error("Error generating HTML:", error);
@@ -235,6 +249,18 @@ app.post(
             { HTMLTemplate: diamond.HTMLTemplate }
           );
         }
+        // Sanitize the filename
+        const sanitizedFileName = sanitizeFileName(
+          `${diamond.VendorStockNumber}_NEW`
+        );
+        // Define the path for the HTML file
+        const htmlFilePath = path.join(
+          __dirname,
+          `../yerushalmi/docs/${sanitizedFileName}.html`
+        );
+
+        // Write the HTML file to the specified path
+        fs.writeFileSync(htmlFilePath, diamond.HTMLTemplate, "utf-8");
       }
 
       res.json({ message: "HTML templates generated and saved successfully" });
