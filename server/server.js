@@ -357,6 +357,31 @@ app.delete("/yerushalmi/diamonds", authenticateToken, async (req, res) => {
   }
 });
 
+// Endpoint to delete all documents from the diamonds_new collection by VendorStockNumber
+app.delete("/yerushalmi/diamonds", authenticateToken, async (req, res) => {
+  const { vendorStockNumbers } = req.body;
+
+  if (!vendorStockNumbers || !Array.isArray(vendorStockNumbers)) {
+    return res
+      .status(400)
+      .json({
+        message: "vendorStockNumbers is required and should be an array",
+      });
+  }
+
+  try {
+    await DiamondNew.deleteMany({
+      VendorStockNumber: { $in: vendorStockNumbers },
+    });
+    res.status(200).json({ message: "Selected diamonds deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting diamonds:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to delete diamonds", error: error.message });
+  }
+});
+
 //the all colors from the mongoDB
 app.get("/yerushalmi/colors", async (req, res) => {
   try {
